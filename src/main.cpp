@@ -20,14 +20,7 @@ RgbColor black(0);
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 
-
-const int mqtt_port = 8883;
-
-const char *mqtt_server = "";
-const char *mqtt_user = "";
-const char *mqtt_client_id = mqtt_user;
-const char *mqtt_password = "";
-const char *mqtt_topic = "";
+#include "network.hpp"
 
 WiFiClientSecure esp_client;
 PubSubClient mqtt_client(esp_client);
