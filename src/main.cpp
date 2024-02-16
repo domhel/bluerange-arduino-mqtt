@@ -18,23 +18,16 @@ RgbColor black(0);
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 #include <WiFiClientSecure.h>
-
-#define BLUERANGE
-//#define MQTT_DASHBOARD
+#include <ArduinoJson.h>
 
 
 const int mqtt_port = 8883;
 
-#ifdef BLUERANGE
-#elif defined(MQTT_DASHBOARD)
-const char *mqtt_server = "mqtt-dashboard.com";
-const char *mqtt_topic = "testtopic/#";
-#else
 const char *mqtt_server = "";
 const char *mqtt_user = "";
+const char *mqtt_client_id = mqtt_user;
 const char *mqtt_password = "";
 const char *mqtt_topic = "";
-#endif
 
 WiFiClientSecure esp_client;
 PubSubClient mqtt_client(esp_client);
@@ -49,7 +42,33 @@ void setup_wifi()
     Serial.println("Connecting to WiFi...");
   }
   Serial.println("Connected to WiFi!");
+}
 
+void set_all_pixels(RgbColor &color)
+{
+  for (uint32_t i = 0; i < PixelCount; i++)
+  {
+    strip.SetPixelColor(i, color);
+  }
+  strip.Show();
+}
+
+void on_motion_changed(uint32_t motion_value)
+{
+  if (motion_value)
+  {
+    set_all_pixels(blue);
+  }
+  else
+  {
+    set_all_pixels(black);
+  }
+}
+
+void setup_leds()
+{
+  strip.Begin();
+  strip.Show();
 }
 
 void mqtt_callback(char *topic, byte *payload, unsigned int length)
@@ -57,13 +76,23 @@ void mqtt_callback(char *topic, byte *payload, unsigned int length)
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] ");
-  for (unsigned int i = 0; i < length; i++)
+  JsonDocument doc;
+  DeserializationError error = deserializeJson(doc, payload);
+  if (error)
   {
-    Serial.print((char)payload[i]);
+    Serial.print(F("deserializeJson() failed: "));
+    Serial.println(error.f_str());
+    return;
   }
+  Serial.println("Payload:");
+  serializeJsonPretty(doc, Serial);
+  if (doc.containsKey("type") && doc["type"].as<String>() == "MOTION" && doc.containsKey("value"))
+  {
+    on_motion_changed(doc["value"]);
+  }
+
   Serial.println();
 }
-
 
 void setup_mqtt()
 {
@@ -83,11 +112,7 @@ void reconnect_mqtt()
   {
     Serial.print("Attempting MQTT connection...");
 
-#ifdef BLUERANGE
-    if (mqtt_client.connect("ESP8266Client", mqtt_user, mqtt_password))
-#elif defined(MQTT_DASHBOARD)
-    if (client.connect("ESP8266ClientABC"))
-#endif
+    if (mqtt_client.connect(mqtt_client_id, mqtt_user, mqtt_password))
     {
       Serial.println("connected");
       const bool res = mqtt_client.subscribe(mqtt_topic);
@@ -119,26 +144,4 @@ void loop()
     reconnect_mqtt();
   }
   mqtt_client.loop();
-}
-
-void setup_leds()
-{
-  strip.Begin();
-  strip.Show();
-}
-
-void on_motion_changed(uint32_t motion_value) {
-  if (motion_value) {
-    set_all_pixels(blue);
-  } else {
-    set_all_pixels(black);
-  }
-}
-
-void set_all_pixels(RgbColor& color) {
-  for (uint32_t i = 0; i < PixelCount; i++)
-  {
-    strip.SetPixelColor(i, color);
-  }
-  strip.Show();
 }
