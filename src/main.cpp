@@ -13,8 +13,6 @@ RgbColor blue(0, 0, colorSaturation);
 RgbColor white(colorSaturation);
 RgbColor black(0);
 
-#define MQTT_MAX_PACKET_SIZE 1024
-
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 #include <WiFiClientSecure.h>
@@ -89,10 +87,8 @@ void mqtt_callback(char *topic, byte *payload, unsigned int length)
 
 void setup_mqtt()
 {
-  // Set the MQTT server and SSL/TLS options
+  mqtt_client.setBufferSize(1024);
   mqtt_client.setServer(mqtt_server, mqtt_port);
-
-  // Set the callback function for incoming messages
   mqtt_client.setCallback(mqtt_callback);
 
   // Ensure a secure connection
