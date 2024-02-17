@@ -1,17 +1,21 @@
 #include <NeoPixelBus.h>
 
-const uint16_t PixelCount = 50; // this example assumes 4 pixels, making it smaller will cause a failure
-const uint8_t PixelPin = 2;     // make sure to set this to the correct pin, ignored for Esp8266
-
-#define colorSaturation 128
+// const uint16_t PixelCount = 162; // bathroom
+const uint16_t PixelCount = 60; // kitchen
+const uint8_t PixelPin = 2; // make sure to set this to the correct pin, ignored for Esp8266
 
 NeoPixelBus<NeoGrbFeature, NeoWs2812xMethod> strip(PixelCount, PixelPin);
 
-RgbColor red(colorSaturation, 0, 0);
-RgbColor green(0, colorSaturation, 0);
-RgbColor blue(0, 0, colorSaturation);
-RgbColor white(colorSaturation);
+const uint8_t brightness = 64;
+const unsigned long followUpTimeMs = 7 * 60 * 1000;
+unsigned long turnOffLightsAtMs = 0;
+const char *deviceId = "BBKXQ";
+
+constexpr unsigned long nightTimeStartMs = 16 * 60 * 60 * 1000;
+constexpr unsigned long nightTimeEndMs = 8 * 60 * 60 * 1000;
+
 RgbColor black(0);
+RgbColor amber = RgbColor(0xFF, 0xBF, 0x00).Dim(brightness);
 
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
@@ -44,15 +48,32 @@ void set_all_pixels(RgbColor &color)
   strip.Show();
 }
 
-void on_motion_changed(uint32_t motion_value)
+bool is_night_time(unsigned long timestamp)
+{
+  const auto currentTimeMs = timestamp % (86400 * 1000);
+  return currentTimeMs < nightTimeStartMs || currentTimeMs > nightTimeEndMs;
+}
+
+void bump_turn_off_time()
+{
+  turnOffLightsAtMs = millis() + followUpTimeMs;
+  Serial.printf("Next off time at %.1f min after boot\n", turnOffLightsAtMs / (1000.0f * 60.0f));
+}
+
+void on_motion_changed(uint32_t motion_value, uint64_t timestamp)
 {
   if (motion_value)
   {
-    set_all_pixels(blue);
+    if (is_night_time(timestamp))
+    {
+      Serial.println("Turning on lights");
+      set_all_pixels(amber);
+    }
+    turnOffLightsAtMs = 0;
   }
   else
   {
-    set_all_pixels(black);
+    bump_turn_off_time();
   }
 }
 
@@ -77,12 +98,14 @@ void mqtt_callback(char *topic, byte *payload, unsigned int length)
   }
   Serial.println("Payload:");
   serializeJsonPretty(doc, Serial);
-  if (doc.containsKey("type") && doc["type"].as<String>() == "MOTION" && doc.containsKey("value"))
-  {
-    on_motion_changed(doc["value"]);
-  }
-
   Serial.println();
+
+  if (
+      doc.containsKey("type") && doc["type"].as<String>() == "MOTION" && doc.containsKey("value") && doc.containsKey("timestamp") && doc.containsKey("deviceId") && doc["deviceId"].as<String>() == deviceId)
+  {
+    const unsigned long timestamp = doc["timestamp"].as<unsigned long>();
+    on_motion_changed(doc["value"], timestamp);
+  }
 }
 
 void setup_mqtt()
@@ -117,6 +140,22 @@ void reconnect_mqtt()
   }
 }
 
+void maybe_turn_off_lights()
+{
+  if (turnOffLightsAtMs == 0)
+  {
+    return;
+  }
+
+  const unsigned long now = millis();
+  if (now > turnOffLightsAtMs)
+  {
+    Serial.println("Turning off lights");
+    set_all_pixels(black);
+    turnOffLightsAtMs = 0;
+  }
+}
+
 void setup()
 {
   Serial.begin(115200);
@@ -133,4 +172,5 @@ void loop()
     reconnect_mqtt();
   }
   mqtt_client.loop();
+  maybe_turn_off_lights();
 }
