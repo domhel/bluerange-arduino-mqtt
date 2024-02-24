@@ -33,7 +33,7 @@ public:
     if (duration == 0) {
       return end;
     }
-    return start + (end - start) * (elapsed / duration);
+    return (T)(start + (end - start) * (float)elapsed / (float)duration);
   }
 
   bool is_done(uint32_t now) {

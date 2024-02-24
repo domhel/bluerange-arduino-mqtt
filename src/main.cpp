@@ -17,7 +17,7 @@ NeoPixelBus<NeoGrbFeature, NeoWs2812xMethod> strip(PixelCount, PixelPin);
 const uint8_t brightness = 64;
 const unsigned long followUpTimeMs = 7 * 60 * 1000;
 unsigned long turnOffLightsAtMs = 0;
-const char *deviceId = "BBKXQ";
+const char *deviceId = "BBKXQ"; //KXQ is the kitchen, BBKXP is the bathroom
 
 constexpr unsigned long nightTimeStartMs = 16 * 60 * 60 * 1000;
 constexpr unsigned long nightTimeEndMs = 8 * 60 * 60 * 1000;
@@ -54,15 +54,15 @@ void set_all_pixels(RgbColor &color)
 void start_on_animation()
 {
   set_all_pixels(black);
-  brightness_tween = Tween<int32_t>(0, brightness, 2000, millis(), 50);
+  brightness_tween = Tween<int32_t>(0, brightness, 2000, millis(), 33);
 }
 
 void start_off_animation()
 {
-  brightness_tween = Tween<int32_t>(brightness, 0, 2000, millis(), 50);
+  brightness_tween = Tween<int32_t>(brightness, 0, 2000, millis(), 33);
 }
 
-void handle_animtation(unsigned long now)
+void handle_animation(unsigned long now)
 {
   if (brightness_tween.is_done(now))
   {
@@ -72,15 +72,19 @@ void handle_animtation(unsigned long now)
   if (maybeBrightness)
   {
     const auto brightness = *maybeBrightness;
+    Serial.printf("Setting brightness to %d\n", brightness);
     auto color = orange.Dim(brightness);
+    Serial.printf("Color: %02x %02x %02x\n", color.R, color.G, color.B);
     set_all_pixels(color);
   }
 }
 
-bool is_night_time(unsigned long timestamp)
+bool is_night_time(uint64_t timestamp)
 {
-  const auto currentTimeMs = timestamp % (86400 * 1000);
-  return currentTimeMs < nightTimeStartMs || currentTimeMs > nightTimeEndMs;
+  const unsigned long currentTimeMs = (timestamp % (86400*1000));
+  const auto is_night_time = currentTimeMs > nightTimeStartMs || currentTimeMs < nightTimeEndMs;
+  Serial.printf("Is night time: %s (%lu)\n", is_night_time ? "yes" : "no", currentTimeMs);
+  return is_night_time;
 }
 
 void bump_turn_off_time()
@@ -132,8 +136,7 @@ void mqtt_callback(char *topic, byte *payload, unsigned int length)
   if (
       doc.containsKey("type") && doc["type"].as<String>() == "MOTION" && doc.containsKey("value") && doc.containsKey("timestamp") && doc.containsKey("deviceId") && doc["deviceId"].as<String>() == deviceId)
   {
-    const unsigned long timestamp = doc["timestamp"].as<unsigned long>();
-    on_motion_changed(doc["value"], timestamp);
+    on_motion_changed(doc["value"], doc["timestamp"]);
   }
 }
 
@@ -202,5 +205,5 @@ void loop()
   }
   mqtt_client.loop();
   maybe_turn_off_lights();
-  handle_animtation(millis());
+  handle_animation(millis());
 }
