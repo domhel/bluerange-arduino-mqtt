@@ -1,4 +1,12 @@
 #include <NeoPixelBus.h>
+#include <ESP8266WiFi.h>
+#include <PubSubClient.h>
+#include <WiFiClientSecure.h>
+#include <ArduinoJson.h>
+
+#include "network.hpp"
+#include "tween.hpp"
+
 
 // const uint16_t PixelCount = 162; // bathroom
 const uint16_t PixelCount = 60; // kitchen
@@ -15,14 +23,9 @@ constexpr unsigned long nightTimeStartMs = 16 * 60 * 60 * 1000;
 constexpr unsigned long nightTimeEndMs = 8 * 60 * 60 * 1000;
 
 RgbColor black(0);
-RgbColor amber = RgbColor(0xFF, 0xBF, 0x00).Dim(brightness);
-
-#include <ESP8266WiFi.h>
-#include <PubSubClient.h>
-#include <WiFiClientSecure.h>
-#include <ArduinoJson.h>
-
-#include "network.hpp"
+RgbColor amber = RgbColor(0xFF, 0xBF, 0x00);
+RgbColor orange = RgbColor(0xFF, 0x99, 0x00);
+Tween<int32_t> brightness_tween = Tween<int32_t>(0, brightness, 0, 0, 50);
 
 WiFiClientSecure esp_client;
 PubSubClient mqtt_client(esp_client);
@@ -48,6 +51,32 @@ void set_all_pixels(RgbColor &color)
   strip.Show();
 }
 
+void start_on_animation()
+{
+  set_all_pixels(black);
+  brightness_tween = Tween<int32_t>(0, brightness, 2000, millis(), 50);
+}
+
+void start_off_animation()
+{
+  brightness_tween = Tween<int32_t>(brightness, 0, 2000, millis(), 50);
+}
+
+void handle_animtation(unsigned long now)
+{
+  if (brightness_tween.is_done(now))
+  {
+    return;
+  }
+  const auto maybeBrightness = brightness_tween.perform_step(now);
+  if (maybeBrightness)
+  {
+    const auto brightness = *maybeBrightness;
+    auto color = orange.Dim(brightness);
+    set_all_pixels(color);
+  }
+}
+
 bool is_night_time(unsigned long timestamp)
 {
   const auto currentTimeMs = timestamp % (86400 * 1000);
@@ -67,7 +96,7 @@ void on_motion_changed(uint32_t motion_value, uint64_t timestamp)
     if (is_night_time(timestamp))
     {
       Serial.println("Turning on lights");
-      set_all_pixels(amber);
+      start_on_animation();
     }
     turnOffLightsAtMs = 0;
   }
@@ -151,7 +180,7 @@ void maybe_turn_off_lights()
   if (now > turnOffLightsAtMs)
   {
     Serial.println("Turning off lights");
-    set_all_pixels(black);
+    start_off_animation();
     turnOffLightsAtMs = 0;
   }
 }
@@ -173,4 +202,5 @@ void loop()
   }
   mqtt_client.loop();
   maybe_turn_off_lights();
+  handle_animtation(millis());
 }
