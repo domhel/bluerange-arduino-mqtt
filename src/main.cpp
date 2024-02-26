@@ -54,12 +54,14 @@ void set_all_pixels(RgbColor &color)
 void start_on_animation()
 {
   set_all_pixels(black);
-  brightness_tween = Tween<int32_t>(0, brightness, 2000, millis(), 33);
+  const auto current_brightness = strip.GetPixelColor(0).CalculateBrightness();
+  brightness_tween = Tween<int32_t>(current_brightness, brightness, 2000, millis(), 33);
 }
 
 void start_off_animation()
 {
-  brightness_tween = Tween<int32_t>(brightness, 0, 2000, millis(), 33);
+  const auto current_brightness = strip.GetPixelColor(0).CalculateBrightness();
+  brightness_tween = Tween<int32_t>(current_brightness, 0, 2000, millis(), 33);
 }
 
 void handle_animation(unsigned long now)
