@@ -1,5 +1,9 @@
 #include <NeoPixelBus.h>
+#ifdef ESP8266
 #include <ESP8266WiFi.h>
+#else
+#include <WiFi.h>
+#endif
 #include <PubSubClient.h>
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
@@ -18,6 +22,7 @@ const uint8_t brightness = 64;
 const unsigned long followUpTimeMs = 7 * 60 * 1000;
 const uint32_t animationDurationMs = 2000;
 const uint32_t animationStepTimeMs = 33;
+
 unsigned long turnOffLightsAtMs = 0;
 const char *deviceId = "BBKXQ"; //KXQ is the kitchen, BBKXP is the bathroom
 
