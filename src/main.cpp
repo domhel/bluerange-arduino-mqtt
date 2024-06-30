@@ -143,11 +143,35 @@ void mqtt_callback(char *topic, byte *payload, unsigned int length)
   serializeJsonPretty(doc, Serial);
   Serial.println();
 
-  if (
-      doc.containsKey("type") && doc["type"].as<String>() == "MOTION" && doc.containsKey("value") && doc.containsKey("timestamp") && doc.containsKey("deviceId") && doc["deviceId"].as<String>() == deviceId)
-  {
-    on_motion_changed(doc["value"], doc["timestamp"]);
+  const auto topicString = String(topic);
+  if (topicString.endsWith("sensorData")) {
+    Serial.println("DBG: sensorData");
+    if (
+        doc.containsKey("type") && doc["type"].as<String>() == "MOTION" && doc.containsKey("value") && doc.containsKey("timestamp") && doc.containsKey("deviceId") && doc["deviceId"].as<String>() == deviceId)
+    {
+      on_motion_changed(doc["value"], doc["timestamp"]);
+    }
+  } else if (topicString.endsWith("actuatorData")) {
+    char orgaId[40] = {};
+    char siteId[40] = {};
+    char deviceId[40] = {};
+    char actuatorType[40] = {};
+    int32_t index = 0;
+    sscanf(topic, "rltn-iot/%[^/]/%[^/]/%[^/]/actuator/%[^/]/%d/actuatorData", &orgaId, &siteId, &deviceId, &actuatorType, &index);
+    if (String(deviceId) == relution_device_uuid && String(actuatorType) == "TURN_ON_OFF") {
+      Serial.println("DBG: actuator matches criteria");
+      if (doc.containsKey("value"))
+      {
+        uint32_t value = doc["value"];
+        if (value > 0) {
+          start_on_animation();
+        } else {
+          start_off_animation();
+        }
+      }
+    }
   }
+
 }
 
 void setup_mqtt()
