@@ -16,6 +16,8 @@ NeoPixelBus<NeoGrbFeature, NeoWs2812xMethod> strip(PixelCount, PixelPin);
 
 const uint8_t brightness = 64;
 const unsigned long followUpTimeMs = 7 * 60 * 1000;
+const uint32_t animationDurationMs = 2000;
+const uint32_t animationStepTimeMs = 33;
 unsigned long turnOffLightsAtMs = 0;
 const char *deviceId = "BBKXQ"; //KXQ is the kitchen, BBKXP is the bathroom
 
@@ -25,7 +27,7 @@ constexpr unsigned long nightTimeEndMs = 8 * 60 * 60 * 1000;
 RgbColor black(0);
 RgbColor amber = RgbColor(0xFF, 0xBF, 0x00);
 RgbColor orange = RgbColor(0xFF, 0x99, 0x00);
-Tween<int32_t> brightness_tween = Tween<int32_t>(0, brightness, 0, 0, 50);
+Tween<int32_t> brightness_tween = Tween<int32_t>(0, 0, 0, 0, animationStepTimeMs);
 
 WiFiClientSecure esp_client;
 PubSubClient mqtt_client(esp_client);
@@ -53,15 +55,16 @@ void set_all_pixels(RgbColor &color)
 
 void start_on_animation()
 {
-  set_all_pixels(black);
-  const auto current_brightness = strip.GetPixelColor(0).CalculateBrightness();
-  brightness_tween = Tween<int32_t>(current_brightness, brightness, 2000, millis(), 33);
+  const auto now = millis();
+  const auto current_brightness = brightness_tween.get_value(now);
+  brightness_tween = Tween<int32_t>(current_brightness, brightness, animationDurationMs, millis(), animationStepTimeMs);
 }
 
 void start_off_animation()
 {
-  const auto current_brightness = strip.GetPixelColor(0).CalculateBrightness();
-  brightness_tween = Tween<int32_t>(current_brightness, 0, 2000, millis(), 33);
+  const auto now = millis();
+  const auto current_brightness = brightness_tween.get_value(now);
+  brightness_tween = Tween<int32_t>(current_brightness, 0, animationDurationMs, millis(), animationStepTimeMs);
 }
 
 void handle_animation(unsigned long now)
