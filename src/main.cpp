@@ -1,4 +1,5 @@
 #include <NeoPixelBus.h>
+#include <NeoPixelAnimator.h>
 #ifdef ESP8266
 #include <ESP8266WiFi.h>
 #else
@@ -13,10 +14,12 @@
 
 
 // const uint16_t PixelCount = 162; // bathroom
-const uint16_t PixelCount = 60; // kitchen
+const uint16_t PixelCount = 150; // kitchen
+const uint16_t ledsPerColor = 80;
 const uint8_t PixelPin = 2; // make sure to set this to the correct pin, ignored for Esp8266
 
 NeoPixelBus<NeoGrbFeature, NeoWs2812xMethod> strip(PixelCount, PixelPin);
+NeoPixelAnimator animations(PixelCount);
 
 const uint8_t brightness = 64;
 const unsigned long followUpTimeMs = 7 * 60 * 1000;
@@ -29,10 +32,26 @@ const char *deviceId = "BBKXQ"; //KXQ is the kitchen, BBKXP is the bathroom
 constexpr unsigned long nightTimeStartMs = 16 * 60 * 60 * 1000;
 constexpr unsigned long nightTimeEndMs = 8 * 60 * 60 * 1000;
 
-RgbColor black(0);
+// RgbColor black(0);
 RgbColor amber = RgbColor(0xFF, 0xBF, 0x00);
 RgbColor orange = RgbColor(0xFF, 0x99, 0x00);
+// Color definitions
+const RgbColor red(255, 0, 0);
+const RgbColor green(0, 255, 0);
+const RgbColor blue(0, 0, 255);
+const RgbColor white(255);
+const RgbColor black(0);
 Tween<int32_t> brightness_tween = Tween<int32_t>(0, 0, 0, 0, animationStepTimeMs);
+
+// Animation parameters
+uint16_t animationIndex = 0;
+uint16_t animationDuration = 10000; // Duration of each animation in milliseconds
+
+RgbColor spiralColor = RgbColor(0x00, 0xFF, 0xFF);
+uint16_t spiralPosition = 0;
+const uint16_t ledsPerRevolution = 10;
+const uint32_t spiralSpeed = 100; // ms
+unsigned long lastSpiralUpdate = 0;
 
 WiFiClientSecure esp_client;
 PubSubClient mqtt_client(esp_client);
@@ -224,20 +243,101 @@ void maybe_turn_off_lights()
 
 void setup()
 {
-  Serial.begin(115200);
-  setup_leds();
-  setup_wifi();
-  setup_mqtt();
+  // NeoPixelBus<NeoGrbFeature, NeoWs2812xMethod> strip2(PixelCount, PixelPin);
+  strip.Begin();
+  // for (uint32_t i = 0; i < PixelCount; i++)
+  // {
+  //   strip2.SetPixelColor(i, amber.Dim(64));
+  // }
+  strip.Show();
+}
+
+unsigned long last_try = 0;
+int led = 0;
+
+void pulsatingEffect() {
+    static uint16_t lastUpdate = millis();
+    uint16_t now = millis();
+    if (now - lastUpdate > 20) {
+        float progress = (now % animationDuration) / (float)animationDuration;
+        uint8_t brightness = (sin(progress * 2 * PI) + 1) * 127; // Sine wave for smooth pulsing
+        for (uint16_t i = 0; i < PixelCount; i++) {
+            strip.SetPixelColor(i, RgbColor::LinearBlend(black, white, brightness));
+        }
+        strip.Show();
+        lastUpdate = now;
+    }
+}
+
+// Function for color changing animation
+void colorChangeAnimation() {
+    static uint16_t lastUpdate = millis();
+    uint16_t now = millis();
+    if (now - lastUpdate > 20) {
+        float progress = (now % animationDuration) / (float)animationDuration;
+        RgbColor color = RgbColor::LinearBlend(red, green, progress);
+        if (progress > 0.5) {
+            color = RgbColor::LinearBlend(green, blue, static_cast<float>((progress - 0.5) * 2));
+        }
+        for (uint16_t i = 0; i < PixelCount; i++) {
+            strip.SetPixelColor(i, color);
+        }
+        strip.Show();
+        lastUpdate = now;
+    }
+}
+
+// Function for a spiral animation
+void spiralAnimation() {
+    static uint16_t lastUpdate = millis();
+    uint16_t now = millis();
+    if (now - lastUpdate > 20) {
+        float progress = (now % animationDuration) / (float)animationDuration;
+        for (uint16_t i = 0; i < PixelCount; i++) {
+            float spiralProgress = (i / (float)PixelCount) + progress;
+            if (spiralProgress > 1) spiralProgress -= 1;
+            RgbColor color = RgbColor::LinearBlend(black, white, static_cast<float>(sin(spiralProgress * 2 * PI) * 0.5 + 0.5));
+            strip.SetPixelColor(i, color);
+        }
+        strip.Show();
+        lastUpdate = now;
+    }
+}
+
+void combinedAnimation() {
+    static uint16_t lastUpdate = millis();
+    uint16_t now = millis();
+    if (now - lastUpdate > 20) {
+        float progress = (now % animationDuration) / (float)animationDuration;
+        for (uint16_t i = 0; i < PixelCount; i++) {
+            float spiralProgress = (i / (float)PixelCount) + progress;
+            if (spiralProgress > 1) spiralProgress -= 1;
+            
+            // Calculate the color based on the spiral progress using HSL for smoother transitions
+            HslColor hslColor(spiralProgress, 1.0, 0.5); // Full hue range, saturation at max, lightness at half
+            RgbColor baseColor = RgbColor(hslColor);
+            
+            // Apply brightness based on the sine wave for a pulsating effect
+            float brightness = sin(spiralProgress * 2 * PI) * 0.5 + 0.5;
+            RgbColor color = RgbColor::LinearBlend(black, baseColor, static_cast<float>(brightness));
+            
+            // Limit the number of LEDs per color
+            uint16_t colorIndex = static_cast<uint16_t>(spiralProgress * PixelCount);
+            if (colorIndex % (PixelCount / ledsPerColor) < ledsPerColor) {
+                strip.SetPixelColor(i, color);
+            } else {
+                strip.SetPixelColor(i, black);
+            }
+        }
+        strip.Show();
+        lastUpdate = now;
+    }
 }
 
 void loop()
 {
-
-  if (!mqtt_client.connected())
-  {
-    reconnect_mqtt();
-  }
-  mqtt_client.loop();
-  maybe_turn_off_lights();
-  handle_animation(millis());
+    // pulsatingEffect();
+    // colorChangeAnimation();
+    combinedAnimation();
+    // spiralAnimation();
 }
