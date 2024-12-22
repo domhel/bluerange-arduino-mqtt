@@ -10,3 +10,4 @@ const char *mqtt_user = "";
 const char *mqtt_client_id = mqtt_user;
 const char *mqtt_password = "";
 const char *mqtt_topic = "rltn-iot/{orga_id}/{site_id}/#";
+const char *relution_device_uuid = "abc";
