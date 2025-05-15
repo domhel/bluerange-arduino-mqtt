@@ -1,3 +1,6 @@
+#define ACTIVATE_BLUERANGE_WIFI 0
+#define ACTIVATE_SHT21 1
+
 #include <NeoPixelBus.h>
 #ifdef ESP8266
 #include <ESP8266WiFi.h>
@@ -23,8 +26,12 @@ const unsigned long followUpTimeMs = 7 * 60 * 1000;
 const uint32_t animationDurationMs = 2000;
 const uint32_t animationStepTimeMs = 33;
 
+long long maxKnownTimestamp = 1747341208907; // may 15, 2025
+long long maxKnownTimestampUpdatedAt = 0;
+
 unsigned long turnOffLightsAtMs = 0;
-const char *deviceId = "BBKXQ"; //KXQ is the kitchen, BBKXP is the bathroom
+const char *deviceId = "BBKXP"; //KXQ is the kitchen, BBKXP is the bathroom, V-6RW93YZRDK is ESP Temp Sensor
+const char *thisDeviceId = "V-6RW93YZRDK";
 
 constexpr unsigned long nightTimeStartMs = 16 * 60 * 60 * 1000;
 constexpr unsigned long nightTimeEndMs = 8 * 60 * 60 * 1000;
@@ -146,6 +153,13 @@ void mqtt_callback(char *topic, byte *payload, unsigned int length)
   const auto topicString = String(topic);
   if (topicString.endsWith("sensorData")) {
     Serial.println("DBG: sensorData");
+    if (doc.containsKey("timestamp")) {
+      long long timestamp = doc["timestamp"];
+      if (timestamp > maxKnownTimestamp) {
+        maxKnownTimestamp = timestamp;
+        maxKnownTimestampUpdatedAt = millis();
+      }
+    }
     if (
         doc.containsKey("type") && doc["type"].as<String>() == "MOTION" && doc.containsKey("value") && doc.containsKey("timestamp") && doc.containsKey("deviceId") && doc["deviceId"].as<String>() == deviceId)
     {
@@ -222,6 +236,7 @@ void maybe_turn_off_lights()
   }
 }
 
+#if ACTIVATE_BLUERANGE_WIFI == 1
 void setup()
 {
   Serial.begin(115200);
@@ -241,3 +256,71 @@ void loop()
   maybe_turn_off_lights();
   handle_animation(millis());
 }
+
+#elif ACTIVATE_SHT21 == 1
+
+#include "Adafruit_AHTX0.h"
+
+Adafruit_AHTX0 aht;
+
+long long lastSensorReadMs = 0;
+void setup_temperature_sensor() {
+  lastSensorReadMs = 0;
+  if (aht.begin()) {
+    Serial.println("Found AHT20");
+  } else {
+    Serial.println("Didn't find AHT20");
+  }  
+}
+
+void setup() {
+  Serial.begin(115200);
+  setup_temperature_sensor();
+  setup_wifi();
+  setup_mqtt();
+}
+
+
+void loop() {
+  if (!mqtt_client.connected())
+  {
+    reconnect_mqtt();
+  }
+  mqtt_client.loop();
+
+  long long now = millis();
+  if (now > lastSensorReadMs + 10000) {
+    sensors_event_t humidity, temp;
+    aht.getEvent(&humidity, &temp);
+    lastSensorReadMs = now;
+    Serial.printf("%3.02f %%RH\t%2.02f C\n", humidity.relative_humidity, temp.temperature);
+
+    long long timeSinceLastTsUpdate = 0;
+    if (now > maxKnownTimestampUpdatedAt) {
+      timeSinceLastTsUpdate = now - maxKnownTimestampUpdatedAt;
+    }
+
+    long long timestamp = maxKnownTimestamp + timeSinceLastTsUpdate;
+    
+    JsonDocument doc;
+    doc["deviceUuid"] = relution_device_uuid;
+    doc["deviceId"] = thisDeviceId;
+    doc["siteUuid"] = "75AD5458-1EB1-4929-B783-8627EC20A132";
+    doc["module"] = "io";
+    doc["type"] = "TEMPERATURE";
+    doc["index"] = 0;
+    doc["value"] = temp.temperature;
+    doc["component"] = 0;
+    doc["register"] = 0;
+    doc["timestamp"] = timestamp;
+
+    const char* topic = "rltn-iot/02CD3837-931B-4E90-BC0F-218CF4C95934/75AD5458-1EB1-4929-B783-8627EC20A132/0196D587-D9F1-763E-97D6-8C7D131704C6/sensor/TEMPERATURE/0/sensorData";
+
+    String output;
+    serializeJson(doc, output);
+
+    mqtt_client.publish(topic, output.c_str());
+  }
+}
+
+#endif //ACTIVATE_BLUERANGE_WIFI == 1
