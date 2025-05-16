@@ -318,8 +318,14 @@ void loop() {
 
     String output;
     serializeJson(doc, output);
-
     mqtt_client.publish(topic, output.c_str());
+
+    output.clear();
+    const char* topicHumidity = "rltn-iot/02CD3837-931B-4E90-BC0F-218CF4C95934/75AD5458-1EB1-4929-B783-8627EC20A132/0196D587-D9F1-763E-97D6-8C7D131704C6/sensor/HUMIDITY/0/sensorData";
+    doc["type"] = "HUMIDITY";
+    doc["value"] = humidity.relative_humidity;
+    serializeJson(doc, output);
+    mqtt_client.publish(topicHumidity, output.c_str());
   }
 }
 
