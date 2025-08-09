@@ -1,0 +1,7 @@
+#pragma once
+
+#define DEVICE_BATHROOM_MIRROR 1
+#define DEVICE_KITCHEN_LED 0
+#define DEVICE_ESP_TEMPERATURE_SENSOR 0
+
+static_assert(DEVICE_BATHROOM_MIRROR + DEVICE_KITCHEN_LED + DEVICE_ESP_TEMPERATURE_SENSOR == 1, "must select one device type");

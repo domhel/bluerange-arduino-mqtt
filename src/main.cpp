@@ -1,6 +1,3 @@
-#define ACTIVATE_BLUERANGE_WIFI 0
-#define ACTIVATE_SHT21 1
-
 #include <NeoPixelBus.h>
 #ifdef ESP8266
 #include <ESP8266WiFi.h>
@@ -13,10 +10,13 @@
 
 #include "network.hpp"
 #include "tween.hpp"
+#include "config.hpp"
 
-
-// const uint16_t PixelCount = 162; // bathroom
+#if DEVICE_BATHROOM_MIRROR == 1
+const uint16_t PixelCount = 162; // bathroom
+#else
 const uint16_t PixelCount = 60; // kitchen
+#endif
 const uint8_t PixelPin = 2; // make sure to set this to the correct pin, ignored for Esp8266
 
 NeoPixelBus<NeoGrbFeature, NeoWs2812xMethod> strip(PixelCount, PixelPin);
@@ -236,7 +236,7 @@ void maybe_turn_off_lights()
   }
 }
 
-#if ACTIVATE_BLUERANGE_WIFI == 1
+#if DEVICE_BATHROOM_MIRROR == 1 || DEVICE_KITCHEN_LED == 1
 void setup()
 {
   Serial.begin(115200);
@@ -257,7 +257,7 @@ void loop()
   handle_animation(millis());
 }
 
-#elif ACTIVATE_SHT21 == 1
+#elif DEVICE_ESP_TEMPERATURE_SENSOR == 1
 
 #include "Adafruit_AHTX0.h"
 
